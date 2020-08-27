@@ -4,7 +4,7 @@ Running GTB-Tk on CHTC
 
 Setting up the necessary software
 ---------------------------------
-* Log into your CHTC submit not through SSH
+* Log into your CHTC submit
 * Create a directory to hold your build and submit files, then `cd` to that directory
 * Use a text editor to create a file called `build.sub` with the following contents:
 
@@ -34,27 +34,29 @@ queue
 condor_submit -i build.sub
 ```
 
-* The first step is to download and compile Python 2.7.16:
+* The first step is to download and compile Python 3.7.9:
 
 ```bash
-wget https://www.python.org/ftp/python/2.7.16/Python-2.7.16.tgz
-tar xvf Python-2.7.16.tgz
-cd Python-2.7.16
+wget https://www.python.org/ftp/python/3.7.9/Python-3.7.9.tgz
+tar xvf Python-3.7.9.tgz
+cd Python-3.7.9
 ./configure --prefix=${PWD}/../python
 make
 make install
 cd ..
 export PATH=${PWD}/python/bin:$PATH
-wget https://bootstrap.pypa.io/get-pip.py
-python get-pip.py
-rm get-pip.py
-rm -rf Python-2.7.16*
+cd python/bin
+#telling bash to use python3 instead of 2. Python3 automatically installs pip3 as well
+alias python=${PWD}/python3
+#check python version. It should be python3 to be able to use pip3
+python -V
+cd ../..
 ```
 
 * Now we install gtdbtk:
 
 ```bash
-pip install gtdbtk future numpy
+pip3 install gtdbtk future numpy
 ```
 
 * Then we install some other programs that gtdbtk needs:
@@ -122,17 +124,17 @@ tar -czvf gtdbtk_python.tar.gz python
 
 * Then finish the interactive job with the `exit` command. If everything worked correctly, the job should copy over the `gtdbtk_python.tar.gz` file to the submit node.
 
-Before you run GTDB-Tk, you must download a large (23 GB) file to your `/mnt/gluster` folder. 
+Before you run GTDB-Tk, you must download the lastest GTDB-tk database (r_95 as of 2020) a large (27 GB) file to your `/staging/<USERNAME>` folder.
 
 ```bash
-cd /mnt/gluster/<USERNAME>
-wget https://data.ace.uq.edu.au/public/gtdbtk/release_86/gtdbtk.r86_v2_data.tar.gz
+cd /staging/<USERNAME>
+wget https://data.ace.uq.edu.au/public/gtdb/data/releases/release95/95.0/auxillary_files/gtdbtk_r95_data.tar.gz
 ```
 
 Running GTDB-Tk on CHTC
 -----------------------
 * Create a directory to hold your job files and `cd` into that directory
-* Create a subdirectory to hold your genome fasta files. We'll assume it is called `input_fasta_files`
+* Create a subdirectory to hold your genome fasta files. We'll assume it is called `input_fasta_files`. Prefrebly try to create this folder in `/staging/<USERNAME>`. I have noticed that when all the files are transferred from `/staging/<USERNAME>` the chances of crashing due to pplacer are less.
 * Copy over your input files to the `input_fasta_files` directory
 * Now use a text editor to make a submit file called `gtdbtk.sub`, with the following contents:
 
@@ -144,15 +146,16 @@ output = gtdbtk_$(Cluster)_$(Process).out
 executable = run_gtdbtk.sh
 should_transfer_files = YES
 when_to_transfer_output = ON_EXIT
-transfer_input_files = input_fasta_files,gtdbtk_python.tar.gz,/mnt/gluster/jkwan2/gtdbtk.r86_v2_data.tar.gz
-request_cpus = 16
-request_memory = 16GB
-request_disk = 150GB
-requirements = (Target.HasGluster == true)
+transfer_input_files = /staging/suppal3/gtdbtk_python3.tar.gz, /staging/suppal3/gtdbtk_r95_data.tar.gz, /staging/suppal3/input_fasta_files
+#Reason for using a single CPU : https://github.com/Ecogenomics/GTDBTk/issues/124#issuecomment-492440700 
+request_cpus = 1
+request_memory = 400GB
+request_disk = 250GB
+requirements = (Target.HasCHTCStaging == true)
 queue 1
 ```
 
-Note: Remember to adapt the exact path to the `tar.gz` files to fit your setup. Also, I found that asking for 1 GB RAM per CPU seems to work when you use `--scratch`.
+Note: Remember to adapt the exact path to the `tar.gz` files to fit your setup.
 
 * Use a text editor to make a bash script to set up and run the job called `run_gtdbtk.sh` with the following contents:
 
@@ -160,23 +163,24 @@ Note: Remember to adapt the exact path to the `tar.gz` files to fit your setup. 
 #!/usr/bin/bash
 
 # Expand gtdbtk files
-tar xf gtdbtk_python.tar.gz
-rm gtdbtk_python.tar.gz
-tar xf gtdbtk.r86_v2_data.tar.gz
-rm gtdbtk.r86_v2_data.tar.gz
+tar xf gtdbtk_python3.tar.gz
+rm gtdbtk_python3.tar.gz
+tar xf gtdbtk.r95_data.tar.gz
+rm gtdbtk.r95_data.tar.gz
 
 # Set up path to executables and python etc.
 export PATH=${PWD}/python/bin:$PATH
 export GTDBTK_DATA_PATH=${PWD}/release86
+sed -i "1s|.*|#!${PWD}/python/bin/python3|" ${PWD}/python/bin/gtdbtk
 
 # Run GTDB-Tk
-gtdbtk classify_wf --genome_dir input_fasta_files --extension fasta --out_dir gtdbtk_output --cpus 16 --scratch_dir scratch
+gtdbtk classify_wf --genome_dir input_fasta_files --extension fasta --out_dir gtdbtk_output --cpus 1
 
 # Compress output
 tar -czvf gtdbtk_output.tar.gz gtdbtk_output
 ```
 
-Note: Remember to alter the gtdbtk arguments so that the number of CPUs requested match the `.sub` file. The `--extension` argument specifies the extension of files to use in the genome directory (here we specify `.fasta`), and the `--scratch_dir` argument tells the pipeline to use more disk vs. memory. Removing `--scratch_dir` will make the pipeline faster, but it will need ~90 GB of RAM.
+Note: Remember to alter the gtdbtk arguments so that the number of CPUs requested match the `.sub` file. The `--extension` argument specifies the extension of files to use in the genome directory (here we specify `.fasta`). You can also ty to use the `--scratch_dir` argument which tells the pipeline to use more disk vs. memory. Removing `--scratch_dir` will make the pipeline faster, but it will need ~90 GB of RAM.
 
 * Make the script executable:
 
@@ -184,7 +188,7 @@ Note: Remember to alter the gtdbtk arguments so that the number of CPUs requeste
 chmod +x run_gtdbtk.sh
 ```
 
-* Now submit the job:
+* Now submit the job and :pray: :bowtie: 
 
 ```bash
 condor_submit gtdbtk.sub
