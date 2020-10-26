@@ -73,12 +73,12 @@ rm *.fastq
 # Now you can download the process to analyze more metagenomes in a single bash file, rather than submitting multiple jobs.
 ```
 Here SRR_numbers.txt looks like:
-SRR10406097
-SRR10406098
-SRR10406099
-SRR10406100
-SRR10406101
-SRR10406102
+SRR10406097   
+SRR10406098   
+SRR10406099   
+SRR10406100   
+SRR10406101   
+SRR10406102   
 
 # Concatenating multiple runs together
 
