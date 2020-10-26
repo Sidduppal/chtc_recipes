@@ -25,6 +25,8 @@ Make sure the memory is higher than the size of the metagenome you are analysing
 
 ## Creating bash file
 
+Whenever you are doing this be very mindful of the disk usage. You fill need about 4x the amount of disk space (in Gb) than the number of bases in the metagenome. Like the [this SRA](https://www.ncbi.nlm.nih.gov/sra/?term=SRR10389008) has about 200G bases. When it is downloaded as `fastq` its size would be around 210Gb. Mutiply this by two as there would be forward as well as reverse reads. Then you'll trim them which would again double their size. So for safety I sometimes even go 5x the disk space (in Gb) of the number of bases.
+
 Use a text editor to create the following file:
 
 ```bash
@@ -69,7 +71,6 @@ nonpareil -s SRA_reads_1P.fastq -T kmer -f fastq -b SRR352287 -t 16 -R 300000
 rm *.fastq
 
 # Now you can download the process to analyze more metagenomes in a single bash file, rather than submitting multiple jobs.
-
 ```
 Here SRR_numbers.txt looks like:
 SRR10406097
@@ -78,3 +79,31 @@ SRR10406099
 SRR10406100
 SRR10406101
 SRR10406102
+
+# Concatenating multiple runs together
+
+In case you SRA reads have multiple runs, like with [this SRA](https://www.ncbi.nlm.nih.gov/sra/?term=SRR398109). This SRA ID has two sets of reads, which would probably be becasue they ran it the second time to get a higher coverage.
+<br> We first download the two sets of reads separately and then trim them. Then we concatenate them together.
+
+```bash
+fastq-dump -I --split-files SRR398109
+
+trimmomatic PE -threads 16 -baseout SRA_reads_SRR398109.fastq SRR398109_1.fastq SRR398109_2.fastq \
+ILLUMINACLIP:$PWD/miniconda3/pkgs/trimmomatic-0.39-1/share/trimmomatic/adapters/TruSeq3-PE.fa:2:30:10 MINLEN:25
+
+fastq-dump -I --split-files SRR398111
+
+trimmomatic PE -threads 16 -baseout SRA_reads_SRR398111.fastq SRR398111_1.fastq SRR398111_2.fastq \
+ILLUMINACLIP:$PWD/miniconda3/pkgs/trimmomatic-0.39-1/share/trimmomatic/adapters/TruSeq3-PE.fa:2:30:10 MINLEN:25
+
+# Concatenating the reads together
+cat SRA_reads_SRR398109_1P.fastq  SRA_reads_SRR398111_1P.fastq > SRA_reads_1P.fastq
+
+# To check if the number of lines are divisible by four
+echo $(cat SRA_reads_1P.fastq | wc -l)/4 | bc
+
+nonpareil -s SRA_reads_1P.fastq -T kmer -f fastq -b SRX115467 -t 16 -R 300000
+
+rm *.fastq
+```
+Whenever you are concatenating stuff beware that the amount of disk space needed would increase as well. So take that into consideration while making the bash file.
