@@ -1,5 +1,48 @@
 # Running nonpareil on CHTC
 
+## Update Oct 31st, 2020 
+
+A newer and much much faster way to download the reads is to use `fasterq-dump` instead of `fastq-dump`. This is an updated version of `fastq-dump`.
+<br>[see documentation](https://github.com/ncbi/sra-tools/wiki/HowTo:-fasterq-dump)
+It is exactly like `fastq-dump` but better and faster. It can also use multiple threads. Its default behaviour is to use `split 3` which creates three fastq files. 
+<br>Why use split 3 - [this](https://www.biostars.org/p/186741/) and [this](https://www.biostars.org/p/156909/).  First two are for fwrd and rev reads while the other one is for unpaired reads. It also trims reads with length less than 20bp. 
+<br> However, a note of caution here is that `fasterq-dump` uses much more disk space. [See](https://www.biostars.org/p/156909/), they advise to have about 8x to 10x the size of accession to be available as free space in your laptop. 
+<br> You can see the size of an accession using `vdb-dump --info SRR341578`. 
+<br> Multiple threads can be used using `-e` flag
+<br> However, this command is only available on versions > 2.9 and you need to install python 3.7 to use it. Here is the bash file that I use for a simple accession pull:
+
+```bash
+#!/usr/bin/bash
+
+# Set up conda and install dependencies
+
+wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
+export HOME=$PWD
+export PATH
+sh Miniconda3-latest-Linux-x86_64.sh -b -p $PWD/miniconda3
+export PATH=$PWD/miniconda3/bin:$PATH
+rm Miniconda3-latest-Linux-x86_64.sh
+
+conda init bash # needed to restart bash from a shell script
+source ~/.bashrc
+
+# Good for de-bugging
+conda info -a 
+conda install -y -c bioconda python=3.7
+conda install -y -c bioconda sra-tools=2.10
+conda install -y -c bioconda trimmomatic
+conda install -y -c bioconda nonpareil
+
+fasterq-dump SRR9009774 -e 16
+
+trimmomatic PE -threads 16 -baseout SRA_reads.fastq SRR9009774_1.fastq SRR9009774_2.fastq \
+ILLUMINACLIP:$PWD/miniconda3/pkgs/trimmomatic-0.39-1/share/trimmomatic/adapters/TruSeq3-PE.fa:2:30:10 MINLEN:25
+
+nonpareil -s SRA_reads_1P.fastq -T kmer -f fastq -b SRR9009774 -t 16 -R 300000
+
+rm *.fastq
+```
+
 ## Creating submit file
 
 Make a directory to store your submit and bash files and use a text editor to create the following file:
@@ -107,3 +150,6 @@ nonpareil -s SRA_reads_1P.fastq -T kmer -f fastq -b SRX115467 -t 16 -R 300000
 rm *.fastq
 ```
 Whenever you are concatenating stuff beware that the amount of disk space needed would increase as well. So take that into consideration while making the bash file.
+
+
+
